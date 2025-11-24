@@ -6,11 +6,12 @@ TagManager:
   tags:
   - pared_xd
   - pierdes
+  - Enemy
   layers:
   - Default
   - TransparentFX
   - Ignore Raycast
-  - 
+  - Wall
   - Water
   - UI
   - 
