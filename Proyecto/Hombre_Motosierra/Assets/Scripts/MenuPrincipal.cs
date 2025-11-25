@@ -5,8 +5,6 @@ public class MenuPrincipal : MonoBehaviour
 {
     [Header("Nombre de la escena del juego")]
     [SerializeField] private string nombreEscenaJuego = "Inicio_juego";
-    
-    // Cambia "Juego" en el inspector por el nombre real de tu escena
 
     // Llamado desde el botón "Iniciar"
     public void IniciarJuego()
@@ -17,7 +15,14 @@ public class MenuPrincipal : MonoBehaviour
             return;
         }
 
-        Debug.Log($"Cargando escena: {nombreEscenaJuego}");
+        // Asegurarnos de que el tiempo esté en 1 (por si venimos de una pausa)
+        Time.timeScale = 1f;
+
+        // Marcar que queremos que la sesión comience al cargar la escena
+        GameSession.startOnLoad = true;
+        GameSession.sessionDuration = 120f; // 2 minutos (puedes cambiar si quieres variable)
+
+        Debug.Log($"Cargando escena: {nombreEscenaJuego} (iniciando sesión con {GameSession.sessionDuration}s)");
         SceneManager.LoadScene(nombreEscenaJuego);
     }
 

@@ -67,6 +67,13 @@ public class EnemyAI : MonoBehaviour
     private bool isGameOver = false;
     private float currentAnimationSpeed = 0f;
 
+    // -----------------------
+    //      STUN (ATURDIMIENTO)
+    // -----------------------
+    private float stunTimer = 0f;
+    private float savedAgentSpeed = 0f;
+    private bool wasStoppedBeforeStun = false;
+
     // ============================================================
     //      START
     // ============================================================
@@ -116,6 +123,20 @@ public class EnemyAI : MonoBehaviour
     // ============================================================
     void Update()
     {
+        // Si está aturdido, decrementar timer y no procesar IA normal
+        if (stunTimer > 0f)
+        {
+            stunTimer -= Time.deltaTime;
+            if (stunTimer <= 0f)
+            {
+                // Recuperar comportamiento previo
+                agent.isStopped = wasStoppedBeforeStun;
+                agent.speed = isChasing ? chaseSpeed : (isPatrolling ? patrolSpeed : idleSpeed);
+            }
+            UpdateAnimations();
+            return;
+        }
+
         if (isGameOver)
         {
             animator.SetFloat("Speed", 0f);
@@ -345,4 +366,25 @@ public class EnemyAI : MonoBehaviour
             Gizmos.DrawLine(transform.position, player.position);
         }
     }
-}
+
+    // ============================================================
+    //      STUN API (Público)
+    // ============================================================
+    /// <summary>
+    /// Aturde al enemigo durante duration segundos. Si el enemigo ya está aturdido, extiende el tiempo si es mayor.
+    /// </summary>
+    public void Stun(float duration)
+    {
+        if (duration <= 0f) return;
+
+        // Guardar estado previo al stun
+        wasStoppedBeforeStun = agent.isStopped;
+        savedAgentSpeed = agent.speed;
+
+        stunTimer = Mathf.Max(stunTimer, duration);
+
+        // Parar el agente y animaciones
+        agent.isStopped = true;
+        animator.SetFloat("Speed", 0f);
+    }
+}   
