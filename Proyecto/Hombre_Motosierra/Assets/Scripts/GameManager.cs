@@ -8,12 +8,17 @@ public class GameManager : MonoBehaviour
     // ! Gestion de la creacion y destruccion de los mapas
 
     [SerializeField] private GameObject[] arrayMapas;
+    [SerializeField] private GameObject mapaFinalPrefab;
+    [SerializeField] private int mapasAntesDeFinal = 5;
     [SerializeField] private List<GameObject> listaMapasAlrededor;
     [SerializeField] private GameObject mapaActual;
     [SerializeField] private Vector3 posicionMapaActual;
+    [SerializeField] private EnemyTeleportManager enemyTeleporter;
 
-    
+
     private int mapaQueTocaPoner;
+    private int mapasGenerados;
+    private bool finalGenerado;
 
     public static GameManager instancia;
 
@@ -31,6 +36,10 @@ public class GameManager : MonoBehaviour
 
     private void Start()
     {
+        mapaQueTocaPoner = -1;
+        mapasGenerados = 0;
+        finalGenerado = false;
+
         MapaActualPosicion(mapaActual);
 
         listaMapasAlrededor.Add(mapaActual);
@@ -57,13 +66,21 @@ public class GameManager : MonoBehaviour
         // - Recibe las posiciones en X y Z como parametros
     public void CrearEscenario(float posX, float posZ)
     {
-      
-
-        if (mapaQueTocaPoner < arrayMapas.Length -1)
+        GameObject prefab = SeleccionarPrefab();
+        if (prefab == null)
         {
-            GameObject esteMapa = Instantiate(arrayMapas[mapaQueTocaPoner], new Vector3(posicionMapaActual.x + posX, posicionMapaActual.y, posicionMapaActual.z + posZ), Quaternion.identity);
+            Debug.LogWarning("[GameManager] No hay prefab disponible para instanciar.");
+            return;
+        }
 
-            listaMapasAlrededor.Add(esteMapa);
+        GameObject esteMapa = Instantiate(prefab, new Vector3(posicionMapaActual.x + posX, posicionMapaActual.y, posicionMapaActual.z + posZ), Quaternion.identity);
+
+        listaMapasAlrededor.Add(esteMapa);
+        mapasGenerados++;
+
+        if (enemyTeleporter != null)
+        {
+            enemyTeleporter.HandleMapaCreado(esteMapa);
         }
     }
 
@@ -73,7 +90,6 @@ public class GameManager : MonoBehaviour
 
     public void BorrarMapasAlrededor()
     {
-      
         foreach (var mapa in listaMapasAlrededor)
         {
             CreadorEscenarios creadorEscenarios = mapa.GetComponentInChildren<CreadorEscenarios>();
@@ -93,6 +109,30 @@ public class GameManager : MonoBehaviour
         listaMapasAlrededor.Clear();
         listaMapasAlrededor.Add(mapaActual);
         
+    }
+
+    private GameObject SeleccionarPrefab()
+    {
+        if (!finalGenerado && mapasGenerados >= mapasAntesDeFinal && mapaFinalPrefab != null)
+        {
+            finalGenerado = true;
+            return mapaFinalPrefab;
+        }
+
+        if (mapaQueTocaPoner >= 0 && mapaQueTocaPoner < arrayMapas.Length)
+        {
+            GameObject elegido = arrayMapas[mapaQueTocaPoner];
+            mapaQueTocaPoner = -1; // volver a aleatorio después de usar el índice forzado
+            return elegido;
+        }
+
+        if (arrayMapas == null || arrayMapas.Length == 0)
+        {
+            return null;
+        }
+
+        int indiceAleatorio = Random.Range(0, arrayMapas.Length);
+        return arrayMapas[indiceAleatorio];
     }
 
     

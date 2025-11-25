@@ -161,22 +161,29 @@ public class EnemyAI : MonoBehaviour
 
     void Patrol()
     {
-        bool hasArrived = !agent.pathPending &&
-                          agent.remainingDistance <= agent.stoppingDistance + 0.05f &&
-                          agent.remainingDistance > 0.01f;
+        bool closeEnough = !agent.pathPending &&
+                           agent.remainingDistance <= agent.stoppingDistance + 0.1f;
+
+        bool stuck = agent.velocity.sqrMagnitude < 0.01f &&
+                     agent.remainingDistance <= agent.stoppingDistance + 0.5f;
 
         if (agent.isStopped)
         {
-            if (currentPatrolTimer > 0)
+            if (currentPatrolTimer > 0f)
             {
                 currentPatrolTimer -= Time.deltaTime;
-                if (currentPatrolTimer <= 0)
-                    SetNewPatrolDestination();
             }
+
+            if (currentPatrolTimer <= 0f)
+            {
+                agent.isStopped = false;
+                SetNewPatrolDestination();
+            }
+
             return;
         }
 
-        if (hasArrived && agent.velocity.sqrMagnitude < 0.1f)
+        if (closeEnough || stuck)
         {
             agent.ResetPath();
             agent.isStopped = true;
@@ -344,5 +351,36 @@ public class EnemyAI : MonoBehaviour
             Gizmos.color = Color.blue;
             Gizmos.DrawLine(transform.position, player.position);
         }
+    }
+
+    // ============================================================
+    //      RUTAS DINÁMICAS
+    // ============================================================
+    public void SetPatrolRoute(List<Transform> newPatrolPoints)
+    {
+        if (agent == null)
+            agent = GetComponent<NavMeshAgent>();
+
+        patrolPoints = newPatrolPoints ?? new List<Transform>();
+
+        if (patrolPoints.Count == 0 || agent == null)
+        {
+            isPatrolling = false;
+            isChasing = false;
+            agent.ResetPath();
+            agent.speed = idleSpeed;
+            agent.isStopped = true;
+            currentAnimationSpeed = 0f;
+            animator.SetFloat("Speed", 0f);
+            return;
+        }
+
+        isChasing = false;
+        isPatrolling = true;
+        currentPatrolIndex = 0;
+        currentPatrolTimer = 0f;
+
+        agent.ResetPath();
+        SetNewPatrolDestination();
     }
 }
