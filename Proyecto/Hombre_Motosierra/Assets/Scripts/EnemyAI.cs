@@ -35,7 +35,6 @@ public class EnemyAI : MonoBehaviour
     public List<AudioClip> footstepSounds;
     public float footstepInterval = 0.6f;
     public float minFootstepSpeed = 0.1f;
-
     public float alertMessageDuration = 3f;
     private float alertMessageTimer = 0f;
     private float proximitySoundTimer = 0f;
