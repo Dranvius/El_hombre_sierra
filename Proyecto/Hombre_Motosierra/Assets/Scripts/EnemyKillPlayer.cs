@@ -1,33 +1,67 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
-using System.Collections; // 🔥 ESTA ES LA LÍNEA QUE FALTABA
+using System.Collections;
 
 public class EnemyKillPlayer : MonoBehaviour
 {
-    private bool gameOver = false;
+    private bool processingCollision = false;
 
-private void OnTriggerEnter(Collider other)
-{
-    if (gameOver) return;
-
-    // Solo matar si ESTE OBJETO es un enemigo
-    if (!CompareTag("Enemy")) return;
-
-    if (other.CompareTag("Player"))
+    private void OnTriggerEnter(Collider other)
     {
-        gameOver = true;
+        if (processingCollision) return;
 
-        Debug.Log("HAS PERDIDO");
+        // Solo actuar si ESTE OBJETO es un enemigo
+        if (!CompareTag("Enemy")) return;
 
-        Time.timeScale = 0f;
+        if (other.CompareTag("Player"))
+        {
+            processingCollision = true;
 
-        StartCoroutine(ShowLoseMessage());
+            Debug.Log("Jugador colisionado por enemigo.");
+
+            bool gameOver = false;
+
+            if (GameManager.instancia != null)
+            {
+                // Dejar que GameManager gestione vidas y final de partida.
+                gameOver = GameManager.instancia.LoseLife();
+            }
+            else
+            {
+                Debug.LogWarning("[EnemyKillPlayer] No hay instancia de GameManager.");
+                // fallback: finalizar partida
+                gameOver = true;
+            }
+
+            if (gameOver)
+            {
+                // Si se acabaron las vidas, mostrar mensaje de pérdida
+                StartCoroutine(ShowLoseMessage());
+            }
+            else
+            {
+                // Si todavía hay vidas, evitar colisiones repetidas temporariamente
+                StartCoroutine(ResetCollisionAfterDelay(1.0f)); // 1 segundo de "inmunidad"
+            }
+        }
     }
-}
+
+    private IEnumerator ResetCollisionAfterDelay(float seconds)
+    {
+        // Espera en tiempo real (no afectado por timeScale)
+        float timer = 0f;
+        while (timer < seconds)
+        {
+            timer += Time.unscaledDeltaTime;
+            yield return null;
+        }
+        processingCollision = false;
+    }
 
     private IEnumerator ShowLoseMessage()
     {
+        // Mantenemos mensajito simple; la pausa ya la puso GameManager.EndGame()
         GameObject canvasObj = new GameObject("LoseCanvas");
         var canvas = canvasObj.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
@@ -41,7 +75,7 @@ private void OnTriggerEnter(Collider other)
         text.alignment = TextAnchor.MiddleCenter;
         text.color = Color.red;
 
-        text.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
 
         var rect = text.GetComponent<RectTransform>();
         rect.sizeDelta = new Vector2(800, 200);
