@@ -8,11 +8,17 @@ public class GameManager : MonoBehaviour
 {
     // ! Gestion de la creacion y destruccion de los mapas
     [SerializeField] private GameObject[] arrayMapas;
+    [SerializeField] private GameObject mapaFinalPrefab;
+    [SerializeField] private int mapasAntesDeFinal = 5;
     [SerializeField] private List<GameObject> listaMapasAlrededor;
     [SerializeField] private GameObject mapaActual;
     [SerializeField] private Vector3 posicionMapaActual;
+    [SerializeField] private EnemyTeleportManager enemyTeleporter;
+
 
     private int mapaQueTocaPoner;
+    private int mapasGenerados;
+    private bool finalGenerado;
 
     public static GameManager instancia;
 
@@ -85,6 +91,11 @@ public class GameManager : MonoBehaviour
         // Initialize map info
         if (mapaActual != null)
             MapaActualPosicion(mapaActual);
+        mapaQueTocaPoner = -1;
+        mapasGenerados = 0;
+        finalGenerado = false;
+
+        MapaActualPosicion(mapaActual);
 
         if (listaMapasAlrededor == null)
             listaMapasAlrededor = new List<GameObject>();
@@ -603,13 +614,21 @@ public class GameManager : MonoBehaviour
     // ! Crear un nuevo escenario en la posicion indicada
     public void CrearEscenario(float posX, float posZ)
     {
-        if (mapaQueTocaPoner < arrayMapas.Length - 1)
+        GameObject prefab = SeleccionarPrefab();
+        if (prefab == null)
         {
-            GameObject esteMapa = Instantiate(arrayMapas[mapaQueTocaPoner], new Vector3(posicionMapaActual.x + posX, posicionMapaActual.y, posicionMapaActual.z + posZ), Quaternion.identity);
-            listaMapasAlrededor.Add(esteMapa);
+            Debug.LogWarning("[GameManager] No hay prefab disponible para instanciar.");
+            return;
+        }
 
-            // Intentar spawnear beacons dentro del mapa instanciado
-            TrySpawnBeaconsInMap(esteMapa);
+        GameObject esteMapa = Instantiate(prefab, new Vector3(posicionMapaActual.x + posX, posicionMapaActual.y, posicionMapaActual.z + posZ), Quaternion.identity);
+
+        listaMapasAlrededor.Add(esteMapa);
+        mapasGenerados++;
+
+        if (enemyTeleporter != null)
+        {
+            enemyTeleporter.HandleMapaCreado(esteMapa);
         }
     }
 
@@ -663,4 +682,30 @@ public class GameManager : MonoBehaviour
         listaMapasAlrededor.Clear();
         listaMapasAlrededor.Add(mapaActual);
     }
+
+    private GameObject SeleccionarPrefab()
+    {
+        if (!finalGenerado && mapasGenerados >= mapasAntesDeFinal && mapaFinalPrefab != null)
+        {
+            finalGenerado = true;
+            return mapaFinalPrefab;
+        }
+
+        if (mapaQueTocaPoner >= 0 && mapaQueTocaPoner < arrayMapas.Length)
+        {
+            GameObject elegido = arrayMapas[mapaQueTocaPoner];
+            mapaQueTocaPoner = -1; // volver a aleatorio después de usar el índice forzado
+            return elegido;
+        }
+
+        if (arrayMapas == null || arrayMapas.Length == 0)
+        {
+            return null;
+        }
+
+        int indiceAleatorio = Random.Range(0, arrayMapas.Length);
+        return arrayMapas[indiceAleatorio];
+    }
+
+    
 }

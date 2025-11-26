@@ -1,5 +1,4 @@
-using System.Collections;
-using System.Collections.Generic;
+using System;
 using UnityEngine;
 
 public class CreadorEscenarios : MonoBehaviour
@@ -10,37 +9,38 @@ public class CreadorEscenarios : MonoBehaviour
         Abajo,
         Izquierda,
         Derecha
-    };
+    }
 
-    [SerializeField] private int siguienteMapa;
+    [SerializeField] private int siguienteMapa = -1; // -1 => aleatorio
+    [SerializeField] private float fallbackWidth = 50f;
+    [SerializeField] private float fallbackLength = 50f;
     private BoxCollider col;
     public bool borrarEsteMapa = true;
 
-    private float mapaWidth;   // tamaño en X
-    private float mapaLength;  // tamaño en Z
+    private float mapaWidth;
+    private float mapaLength;
 
     private void Awake()
     {
         col = GetComponent<BoxCollider>();
 
-        // --------------------------------------------
-        // Buscar el MeshRenderer correctamente
-        // --------------------------------------------
         MeshRenderer renderer = null;
 
-        // 1️⃣ Intentar obtenerlo del padre
         if (transform.parent != null)
+        {
             renderer = transform.parent.GetComponentInChildren<MeshRenderer>();
+        }
 
-        // 2️⃣ Intentar buscar hacia arriba por si está más arriba en jerarquía
         if (renderer == null)
+        {
             renderer = GetComponentInParent<MeshRenderer>();
+        }
 
-        // 3️⃣ Intentar buscar en hijos del mismo objeto
         if (renderer == null)
+        {
             renderer = GetComponentInChildren<MeshRenderer>();
+        }
 
-        // 4️⃣ Asignar tamaño si lo encontramos
         if (renderer != null)
         {
             mapaWidth = renderer.bounds.size.x;
@@ -48,70 +48,60 @@ public class CreadorEscenarios : MonoBehaviour
         }
         else
         {
-            // Valor por defecto para evitar crasheos
-            mapaWidth = 50;
-            mapaLength = 50;
-
-            Debug.LogWarning(
-                $"[{name}] No encontré ningún MeshRenderer. Usando tamaño 50x50 por defecto."
-            );
+            mapaWidth = fallbackWidth;
+            mapaLength = fallbackLength;
+            Debug.LogWarning($"[{name}] No se encontro MeshRenderer. Usando tamano {fallbackWidth}x{fallbackLength} por defecto.");
         }
     }
 
-    // --------------------------------------------
-    // Generar escenarios alrededor
-    // --------------------------------------------
     public void BuclePosiciones()
     {
-        string[] posiciones = System.Enum.GetNames(typeof(Posiciones));
-
-        foreach (var posicion in posiciones)
+        foreach (Posiciones posicion in Enum.GetValues(typeof(Posiciones)))
+        {
             GenerarEscenario(posicion);
+        }
     }
 
-    // --------------------------------------------
-    // Crear mapa según dirección
-    // --------------------------------------------
-    private void GenerarEscenario(string posicion)
+    private void GenerarEscenario(Posiciones posicion)
     {
-        GameManager.instancia.MapaActualPosicion(this.transform.parent.gameObject);
+        var gm = GameManager.instancia;
+        gm.MapaActualPosicion(transform.parent.gameObject);
 
         switch (posicion)
         {
-            case "Arriba":
-                GameManager.instancia.CrearEscenario(0, mapaLength);
+            case Posiciones.Arriba:
+                gm.CrearEscenario(0f, mapaLength);
                 break;
-
-            case "Abajo":
-                GameManager.instancia.CrearEscenario(0, -mapaLength);
+            case Posiciones.Abajo:
+                gm.CrearEscenario(0f, -mapaLength);
                 break;
-
-            case "Izquierda":
-                GameManager.instancia.CrearEscenario(-mapaWidth, 0);
+            case Posiciones.Izquierda:
+                gm.CrearEscenario(-mapaWidth, 0f);
                 break;
-
-            case "Derecha":
-                GameManager.instancia.CrearEscenario(mapaWidth, 0);
+            case Posiciones.Derecha:
+                gm.CrearEscenario(mapaWidth, 0f);
                 break;
         }
 
-        // Desactivar collider para evitar doble activación
-        col.enabled = false;
+        if (col != null)
+        {
+            col.enabled = false;
+        }
     }
 
-    // --------------------------------------------
-    // Cuando el jugador entra al trigger
-    // --------------------------------------------
     private void OnTriggerEnter(Collider other)
     {
-        if (other.CompareTag("Player"))
+        if (!other.CompareTag("Player"))
         {
-            borrarEsteMapa = false;
-
-            GameManager.instancia.CambiaIndiceMapa(siguienteMapa);
-            GameManager.instancia.BorrarMapasAlrededor();
-
-            BuclePosiciones();
+            return;
         }
+
+        borrarEsteMapa = false;
+
+        var gm = GameManager.instancia;
+        gm.CambiaIndiceMapa(siguienteMapa);
+        gm.BorrarMapasAlrededor();
+
+        BuclePosiciones();
     }
 }
