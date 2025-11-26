@@ -73,7 +73,11 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        GameObject esteMapa = Instantiate(prefab, new Vector3(posicionMapaActual.x + posX, posicionMapaActual.y, posicionMapaActual.z + posZ), Quaternion.identity);
+        GameObject esteMapa = Instantiate(
+            prefab,
+            new Vector3(posicionMapaActual.x + posX, 3f, posicionMapaActual.z + posZ),
+            Quaternion.identity
+        );
 
         listaMapasAlrededor.Add(esteMapa);
         mapasGenerados++;
