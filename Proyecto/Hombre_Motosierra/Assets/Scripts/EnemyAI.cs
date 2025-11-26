@@ -20,8 +20,27 @@ public class EnemyAI : MonoBehaviour
     // -----------------------
     [Header("Audio y UI")]
     public AudioClip detectionSound;
+    [Tooltip("Lista opcional de sonidos de detección; se elige uno aleatorio al verte.")]
+    public List<AudioClip> detectionSounds;
+    [Tooltip("Sonidos de terror aleatorios cuando el enemigo está cerca.")]
+    public List<AudioClip> proximitySounds;
+    [Tooltip("Distancia máxima para reproducir sonidos de terror.")]
+    public float proximitySoundRange = 15f;
+    [Tooltip("Tiempo mínimo entre sonidos de terror.")]
+    public float proximitySoundCooldown = 6f;
+    [Tooltip("Música especial/ambiente que se reproducirá en loop.")]
+    public AudioClip backgroundMusic;
+    [Range(0f, 1f)] public float backgroundMusicVolume = 0.6f;
+    [Header("Audio de pasos")]
+    public List<AudioClip> footstepSounds;
+    public float footstepInterval = 0.6f;
+    public float minFootstepSpeed = 0.1f;
+
     public float alertMessageDuration = 3f;
     private float alertMessageTimer = 0f;
+    private float proximitySoundTimer = 0f;
+    private float footstepTimer = 0f;
+    private AudioSource musicSource;
 
     // -----------------------
     //      PATRULLAJE
@@ -97,6 +116,17 @@ public class EnemyAI : MonoBehaviour
             audioSource.spatialBlend = 1f;
         }
 
+        musicSource = gameObject.AddComponent<AudioSource>();
+        musicSource.loop = true;
+        musicSource.playOnAwake = false;
+        musicSource.spatialBlend = 0f;
+        musicSource.volume = backgroundMusicVolume;
+        if (backgroundMusic != null)
+        {
+            musicSource.clip = backgroundMusic;
+            musicSource.Play();
+        }
+
         agent.acceleration = 8f;
         agent.stoppingDistance = waypointThreshold;
         agent.autoBraking = true;
@@ -148,6 +178,9 @@ public class EnemyAI : MonoBehaviour
             return;
         }
 
+        if (proximitySoundTimer > 0f)
+            proximitySoundTimer -= Time.deltaTime;
+
         // DETECCIÓN
         if (CanSeePlayer())
             StartChase();
@@ -159,6 +192,9 @@ public class EnemyAI : MonoBehaviour
             agent.SetDestination(player.position);
         else if (isPatrolling)
             Patrol();
+
+        TryPlayProximitySound();
+        TryPlayFootsteps();
 
         // TIMER ALERTA
         if (alertMessageTimer > 0)
@@ -250,8 +286,12 @@ public class EnemyAI : MonoBehaviour
 
         alertMessageTimer = alertMessageDuration;
 
-        if (audioSource && detectionSound)
-            audioSource.PlayOneShot(detectionSound);
+        if (audioSource)
+        {
+            AudioClip clip = GetDetectionClip();
+            if (clip != null)
+                audioSource.PlayOneShot(clip);
+        }
 
         isPatrolling = false;
         isChasing = true;
@@ -376,6 +416,63 @@ public class EnemyAI : MonoBehaviour
         {
             Gizmos.color = Color.blue;
             Gizmos.DrawLine(transform.position, player.position);
+        }
+    }
+
+    // ============================================================
+    //      AUDIO DE PROXIMIDAD
+    // ============================================================
+    private void TryPlayProximitySound()
+    {
+        if (player == null || audioSource == null || proximitySounds == null || proximitySounds.Count == 0)
+            return;
+
+        if (proximitySoundTimer > 0f)
+            return;
+
+        float dist = Vector3.Distance(transform.position, player.position);
+        if (dist > proximitySoundRange)
+            return;
+
+        AudioClip clip = proximitySounds[Random.Range(0, proximitySounds.Count)];
+        if (clip != null)
+        {
+            audioSource.PlayOneShot(clip);
+            proximitySoundTimer = proximitySoundCooldown;
+        }
+    }
+
+    private AudioClip GetDetectionClip()
+    {
+        if (detectionSounds != null && detectionSounds.Count > 0)
+            return detectionSounds[Random.Range(0, detectionSounds.Count)];
+
+        return detectionSound;
+    }
+
+    private void TryPlayFootsteps()
+    {
+        if (audioSource == null || agent == null || footstepSounds == null || footstepSounds.Count == 0)
+            return;
+
+        if (footstepTimer > 0f)
+            footstepTimer -= Time.deltaTime;
+
+        float speed = agent.velocity.magnitude;
+        if (!agent.isOnNavMesh || agent.isStopped || speed < minFootstepSpeed)
+            return;
+
+        if (footstepTimer > 0f)
+            return;
+
+        AudioClip clip = footstepSounds[Random.Range(0, footstepSounds.Count)];
+        if (clip != null)
+        {
+            audioSource.PlayOneShot(clip);
+
+            // Ajusta la cadencia seg�n la velocidad (m�s r�pido al correr)
+            float speedFactor = Mathf.Clamp(speed / chaseSpeed, 0.5f, 1.5f);
+            footstepTimer = footstepInterval / speedFactor;
         }
     }
 

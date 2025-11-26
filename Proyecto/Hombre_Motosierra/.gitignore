@@ -27,3 +27,6 @@ UserSettings/
 
 # Crash reports
 sysinfo.txt
+
+# External map zips
+mapas/*.zip

@@ -15,6 +15,10 @@ public class PlayerMovement : MonoBehaviour
     public float speed = 5f;
     public float gravity = -9.81f;
     public float jumpHeight = 1.5f;
+    [Header("Audio de pasos")]
+    public AudioClip[] footstepClips;
+    public float footstepInterval = 0.5f;
+    private float footstepTimer;
 
     // Componentes
     private CharacterController controller;
@@ -96,6 +100,7 @@ public class PlayerMovement : MonoBehaviour
 
         // ---- MOVER PERSONAJE ----
         controller.Move(move * speed * Time.deltaTime);
+        HandleFootsteps(move);
 
         // -------------------------
         // 🔥 SALTO
@@ -147,6 +152,38 @@ public class PlayerMovement : MonoBehaviour
                 loseMessage,
                 style
             );
+        }
+    }
+
+    private void HandleFootsteps(Vector3 move)
+    {
+        if (footstepClips == null || footstepClips.Length == 0 || audioSource == null)
+            return;
+
+        if (!isGrounded)
+        {
+            footstepTimer = 0f;
+            return;
+        }
+
+        bool isMoving = move.magnitude > 0.1f;
+        if (!isMoving)
+        {
+            footstepTimer = 0f;
+            return;
+        }
+
+        if (footstepTimer > 0f)
+        {
+            footstepTimer -= Time.deltaTime;
+            return;
+        }
+
+        AudioClip clip = footstepClips[Random.Range(0, footstepClips.Length)];
+        if (clip != null)
+        {
+            audioSource.PlayOneShot(clip);
+            footstepTimer = footstepInterval;
         }
     }
 }
