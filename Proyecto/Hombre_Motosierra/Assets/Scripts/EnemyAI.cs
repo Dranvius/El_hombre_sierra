@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.AI;
 using System.Collections.Generic;
 
@@ -8,7 +8,7 @@ public class EnemyAI : MonoBehaviour
     //      REFERENCIAS
     // -----------------------
     [Header("Referencias")]
-    [Tooltip("Arrastra el transform del jugador aquí.")]
+    [Tooltip("Arrastra el transform del jugador aquÃ­.")]
     public Transform player;
 
     private NavMeshAgent agent;
@@ -20,17 +20,22 @@ public class EnemyAI : MonoBehaviour
     // -----------------------
     [Header("Audio y UI")]
     public AudioClip detectionSound;
-    [Tooltip("Lista opcional de sonidos de detección; se elige uno aleatorio al verte.")]
+    [Tooltip("Lista opcional de sonidos de detecciÃ³n; se elige uno aleatorio al verte.")]
     public List<AudioClip> detectionSounds;
-    [Tooltip("Sonidos de terror aleatorios cuando el enemigo está cerca.")]
+    [Tooltip("Sonidos de terror aleatorios cuando el enemigo estÃ¡ cerca.")]
     public List<AudioClip> proximitySounds;
-    [Tooltip("Distancia máxima para reproducir sonidos de terror.")]
+    [Tooltip("Distancia mÃ¡xima para reproducir sonidos de terror.")]
     public float proximitySoundRange = 15f;
-    [Tooltip("Tiempo mínimo entre sonidos de terror.")]
+    [Tooltip("Tiempo mÃ­nimo entre sonidos de terror.")]
     public float proximitySoundCooldown = 6f;
-    [Tooltip("Música especial/ambiente que se reproducirá en loop.")]
+    [Tooltip("MÃºsica especial/ambiente que se reproducirÃ¡ en loop.")]
     public AudioClip backgroundMusic;
     [Range(0f, 1f)] public float backgroundMusicVolume = 0.6f;
+    [Header("Captura")]
+    [Tooltip("Sonido al atrapar al jugador (ej. motosierra).")]
+    public AudioClip catchSound;
+    [Tooltip("DuraciÃ³n del mensaje al atrapar (segundos).")]
+    public float catchMessageDuration = 1f;
     [Header("Audio de pasos")]
     public List<AudioClip> footstepSounds;
     public float footstepInterval = 0.6f;
@@ -40,6 +45,7 @@ public class EnemyAI : MonoBehaviour
     private float proximitySoundTimer = 0f;
     private float footstepTimer = 0f;
     private AudioSource musicSource;
+    private float catchMessageTimer = 0f;
 
     // -----------------------
     //      PATRULLAJE
@@ -55,9 +61,9 @@ public class EnemyAI : MonoBehaviour
     private float currentPatrolTimer = 0f;
 
     // -----------------------
-    //      DETECCIÓN
+    //      DETECCIÃ“N
     // -----------------------
-    [Header("Detección de Jugador")]
+    [Header("DetecciÃ³n de Jugador")]
     public float visionRange = 50f;
     public float visionAngle = 90f;
     public LayerMask obstacleMask;
@@ -69,16 +75,16 @@ public class EnemyAI : MonoBehaviour
     public float idleSpeed = 0f;
 
     [Tooltip("Velocidad cuando persigue al jugador (Run Speed). IMPORTANTE: Debe ser MAYOR que patrolSpeed.")]
-    public float chaseSpeed = 4.5f; // 🔥 Asegurado que no sea 0
+    public float chaseSpeed = 4.5f; // ðŸ”¥ Asegurado que no sea 0
 
-    [Tooltip("Qué tan rápido alcanza su velocidad en persecución.")]
+    [Tooltip("QuÃ© tan rÃ¡pido alcanza su velocidad en persecuciÃ³n.")]
     public float chaseAcceleration = 20f;
 
     // -----------------------
-    //  CONTROL DE ANIMACIÓN
+    //  CONTROL DE ANIMACIÃ“N
     // -----------------------
-    [Header("Control de Animación")]
-    [Tooltip("Suaviza la transición entre caminar/correr (Blend Tree).")]
+    [Header("Control de AnimaciÃ³n")]
+    [Tooltip("Suaviza la transiciÃ³n entre caminar/correr (Blend Tree).")]
     public float animationSmoothTime = 0.1f;
 
     private bool isChasing = false;
@@ -97,9 +103,14 @@ public class EnemyAI : MonoBehaviour
     // ============================================================
     void Start()
     {
-        agent = GetComponent<NavMeshAgent>();
-        animator = GetComponent<Animator>();
-        audioSource = GetComponent<AudioSource>();
+        EnsureComponents();
+
+        if (player == null)
+        {
+            GameObject playerObj = GameObject.FindGameObjectWithTag("Player");
+            if (playerObj != null)
+                player = playerObj.transform;
+        }
 
         if (agent == null || animator == null || player == null)
         {
@@ -131,7 +142,9 @@ public class EnemyAI : MonoBehaviour
         agent.autoBraking = true;
 
         // Iniciar patrulla si hay puntos
-        if (patrolPoints != null && patrolPoints.Count > 0)
+        bool onMesh = EnsureOnNavMesh();
+
+        if (patrolPoints != null && patrolPoints.Count > 0 && onMesh)
         {
             isPatrolling = true;
             agent.speed = patrolSpeed;
@@ -145,6 +158,13 @@ public class EnemyAI : MonoBehaviour
 
         // Cargar animación inicial
         currentAnimationSpeed = Mathf.InverseLerp(0f, chaseSpeed, agent.speed);
+        if (!EnsureOnNavMesh())
+        {
+            Debug.LogWarning($"[EnemyAI] Agente fuera del NavMesh en Start ({name}). Se desactiva hasta estar en malla.");
+            agent.enabled = false;
+            enabled = false;
+            return;
+        }
     }
 
     // ============================================================
@@ -152,7 +172,10 @@ public class EnemyAI : MonoBehaviour
     // ============================================================
     void Update()
     {
-        // Si está aturdido, decrementar timer y no procesar IA normal
+        EnsurePlayerReference();
+        if (!EnsureOnNavMesh())
+            return;
+        // Si estÃ¡ aturdido, decrementar timer y no procesar IA normal
         if (stunTimer > 0f)
         {
             stunTimer -= Time.deltaTime;
@@ -160,7 +183,7 @@ public class EnemyAI : MonoBehaviour
             {
                 // Recuperar comportamiento previo
                 agent.isStopped = wasStoppedBeforeStun;
-                // Restaurar velocidad: preferimos savedAgentSpeed si válido, sino usar estado actual
+                // Restaurar velocidad: preferimos savedAgentSpeed si vÃ¡lido, sino usar estado actual
                 if (savedAgentSpeed > 0f)
                     agent.speed = savedAgentSpeed;
                 else
@@ -179,8 +202,10 @@ public class EnemyAI : MonoBehaviour
 
         if (proximitySoundTimer > 0f)
             proximitySoundTimer -= Time.deltaTime;
+        if (catchMessageTimer > 0f)
+            catchMessageTimer -= Time.deltaTime;
 
-        // DETECCIÓN
+        // DETECCIÃ“N
         if (CanSeePlayer())
             StartChase();
         else if (isChasing)
@@ -208,6 +233,9 @@ public class EnemyAI : MonoBehaviour
     // ============================================================
     void SetNewPatrolDestination()
     {
+        if (!EnsureOnNavMesh())
+            return;
+
         if (patrolPoints == null || patrolPoints.Count == 0) return;
 
         currentPatrolIndex %= patrolPoints.Count;
@@ -256,7 +284,7 @@ public class EnemyAI : MonoBehaviour
     }
 
     // ============================================================
-    //      DETECCIÓN
+    //      DETECCIÃ“N
     // ============================================================
     bool CanSeePlayer()
     {
@@ -283,13 +311,19 @@ public class EnemyAI : MonoBehaviour
     {
         if (isChasing) return;
 
+        if (!EnsureComponents() || !EnsureOnNavMesh() || player == null)
+            return;
+
         alertMessageTimer = alertMessageDuration;
 
         if (audioSource)
         {
             AudioClip clip = GetDetectionClip();
             if (clip != null)
+            {
+                if (!audioSource.enabled) audioSource.enabled = true;
                 audioSource.PlayOneShot(clip);
+            }
         }
 
         isPatrolling = false;
@@ -350,17 +384,23 @@ public class EnemyAI : MonoBehaviour
     }
 
     // ============================================================
-    //      COLISIÓN
+    //      COLISIÃ“N
     // ============================================================
     private void OnTriggerEnter(Collider other)
     {
         if (other.CompareTag("Player"))
         {
-            isGameOver = true;
-            agent.isStopped = true;
+            if (audioSource != null && catchSound != null)
+            {
+                if (!audioSource.enabled) audioSource.enabled = true;
+                audioSource.PlayOneShot(catchSound);
+            }
+
+            catchMessageTimer = catchMessageDuration;
         }
     }
 
+    // ============================================================
     // ============================================================
     //      GUI
     // ============================================================
@@ -369,19 +409,19 @@ public class EnemyAI : MonoBehaviour
         GUIStyle style = new GUIStyle(GUI.skin.label);
         Rect rect = new Rect(0, 0, Screen.width, Screen.height);
 
-        if (isGameOver)
+        if (catchMessageTimer > 0f)
         {
-            style.fontSize = 50;
-            style.alignment = TextAnchor.MiddleCenter;
+            style.fontSize = 32;
+            style.alignment = TextAnchor.UpperCenter;
             style.normal.textColor = Color.red;
-            GUI.Label(rect, "¡FIN DEL JUEGO!", style);
+            GUI.Label(new Rect(0, 10, Screen.width, 60), "Haz perdido una vida", style);
         }
         else if (alertMessageTimer > 0)
         {
             style.fontSize = 30;
             style.alignment = TextAnchor.UpperCenter;
             style.normal.textColor = Color.yellow;
-            GUI.Label(new Rect(0, 20, Screen.width, 100), "¡TE VIO EL ENEMIGO!", style);
+            GUI.Label(new Rect(0, 20, Screen.width, 100), "¡¡TE VIO EL ENEMIGO!!", style);
         }
         else
         {
@@ -391,8 +431,6 @@ public class EnemyAI : MonoBehaviour
                 "Velocidad: " + agent.velocity.magnitude.ToString("F2"), style);
         }
     }
-
-    // ============================================================
     //      GIZMOS
     // ============================================================
     private void OnDrawGizmos()
@@ -469,14 +507,14 @@ public class EnemyAI : MonoBehaviour
         {
             audioSource.PlayOneShot(clip);
 
-            // Ajusta la cadencia seg�n la velocidad (m�s r�pido al correr)
+            // Ajusta la cadencia segï¿½n la velocidad (mï¿½s rï¿½pido al correr)
             float speedFactor = Mathf.Clamp(speed / chaseSpeed, 0.5f, 1.5f);
             footstepTimer = footstepInterval / speedFactor;
         }
     }
 
     // ============================================================
-    //      RUTAS DINÁMICAS
+    //      RUTAS DINÃMICAS
     // ============================================================
     public void SetPatrolRoute(List<Transform> newPatrolPoints)
     {
@@ -507,10 +545,10 @@ public class EnemyAI : MonoBehaviour
     }
 
     // ============================================================
-    //      STUN API (Público)
+    //      STUN API (PÃºblico)
     // ============================================================
     /// <summary>
-    /// Aturde al enemigo durante duration segundos. Si el enemigo ya está aturdido, extiende el tiempo si es mayor.
+    /// Aturde al enemigo durante duration segundos. Si el enemigo ya estÃ¡ aturdido, extiende el tiempo si es mayor.
     /// </summary>
     public void Stun(float duration)
     {
@@ -526,4 +564,126 @@ public class EnemyAI : MonoBehaviour
         agent.isStopped = true;
         animator.SetFloat("Speed", 0f);
     }
+
+    /// <summary>
+    /// Forzar persecución desde otro script.
+    /// </summary>
+    public void ForceChase(Transform target)
+    {
+        if (target == null) return;
+        if (!EnsureComponents())
+            return;
+        if (!EnsureOnNavMesh())
+            return;
+        player = target;
+        isGameOver = false;
+        isChasing = false;
+        stunTimer = 0f;
+        StartChase();
+    }
+
+    private void EnsurePlayerReference()
+    {
+        if (player != null) return;
+        GameObject p = GameObject.FindGameObjectWithTag("Player");
+        if (p != null)
+            player = p.transform;
+    }
+
+    private bool EnsureOnNavMesh()
+    {
+        if (agent == null)
+            return false;
+
+        if (agent.isOnNavMesh)
+            return true;
+
+        NavMeshHit hit;
+        if (NavMesh.SamplePosition(transform.position, out hit, 5f, NavMesh.AllAreas))
+        {
+            agent.Warp(hit.position);
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Reintenta activar el agente si ya hay NavMesh debajo.
+    /// </summary>
+    public void ReactivateOnNavMesh()
+    {
+        if (!EnsureComponents())
+            return;
+
+        if (!agent.enabled)
+            agent.enabled = true;
+
+        if (EnsureOnNavMesh())
+        {
+            enabled = true;
+            agent.isStopped = false;
+        }
+        else
+        {
+            // sigue fuera de la malla, desactiva hasta que haya NavMesh válido
+            agent.enabled = false;
+            enabled = false;
+        }
+    }
+
+    private bool EnsureComponents()
+    {
+        if (agent == null)
+            agent = GetComponent<NavMeshAgent>();
+        if (animator == null)
+            animator = GetComponent<Animator>();
+        if (audioSource == null)
+            audioSource = GetComponent<AudioSource>();
+        if (audioSource != null && !audioSource.enabled)
+            audioSource.enabled = true;
+
+        return agent != null && animator != null;
+    }
+
+    // ============================================================
+    //      RESET API
+    // ============================================================
+    public void ResetAI(Vector3 position)
+    {
+        if (agent == null)
+            agent = GetComponent<NavMeshAgent>();
+
+        isGameOver = false;
+        isChasing = false;
+        isPatrolling = patrolPoints != null && patrolPoints.Count > 0;
+        currentPatrolIndex = 0;
+        currentPatrolTimer = 0f;
+
+        if (agent != null)
+        {
+            agent.ResetPath();
+            agent.isStopped = false;
+            agent.acceleration = 8f;
+            agent.speed = isPatrolling ? patrolSpeed : idleSpeed;
+            if (agent.isOnNavMesh)
+                agent.Warp(position);
+            else
+                transform.position = position;
+        }
+        else
+        {
+            transform.position = position;
+        }
+
+        if (isPatrolling)
+            SetNewPatrolDestination();
+        else if (animator != null)
+            animator.SetFloat("Speed", 0f);
+    }
 }
+
+
+
+
+

@@ -319,6 +319,7 @@ MonoBehaviour:
   arrayMapas:
   - {fileID: 3134531012585025882, guid: 1b87b292cd06f274ca64c02487c5b8bd, type: 3}
   - {fileID: 3134531012585025882, guid: f671cc9dcb6a2334bae4100f6da66cdc, type: 3}
+  - {fileID: 3134531012585025882, guid: df5527bbbff5b934ba9a1ae6ebb8cd62, type: 3}
   mapaFinalPrefab: {fileID: 2941835452198803680, guid: 697c6342fb0ce954ca870c62287ba930, type: 3}
   mapasAntesDeFinal: 4
   listaMapasAlrededor: []

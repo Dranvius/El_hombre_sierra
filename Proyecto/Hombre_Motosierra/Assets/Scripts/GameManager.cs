@@ -1,8 +1,10 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.SceneManagement;
 using TMPro;
+using Unity.AI.Navigation;
 
 public class GameManager : MonoBehaviour
 {
@@ -14,11 +16,17 @@ public class GameManager : MonoBehaviour
     [SerializeField] private GameObject mapaActual;
     [SerializeField] private Vector3 posicionMapaActual;
     [SerializeField] private EnemyTeleportManager enemyTeleporter;
+    [Header("Respawn")]
+    [SerializeField] private Transform playerSpawnPoint;
+    [SerializeField] private Transform enemySpawnPoint;
+    [SerializeField] private EnemyAI enemyRef;
+    [SerializeField] private float respawnDelay = 1f;
 
 
     private int mapaQueTocaPoner;
     private int mapasGenerados;
     private bool finalGenerado;
+    private Transform playerTransformCache;
 
     public static GameManager instancia;
 
@@ -89,19 +97,17 @@ public class GameManager : MonoBehaviour
     private void Start()
     {
         // Initialize map info
-        if (mapaActual != null)
-            MapaActualPosicion(mapaActual);
+        EnsureMapaActual();
         mapaQueTocaPoner = -1;
         mapasGenerados = 0;
         finalGenerado = false;
-
-        MapaActualPosicion(mapaActual);
 
         if (listaMapasAlrededor == null)
             listaMapasAlrededor = new List<GameObject>();
 
         if (mapaActual != null && !listaMapasAlrededor.Contains(mapaActual))
             listaMapasAlrededor.Add(mapaActual);
+        posicionMapaActual = mapaActual != null ? mapaActual.transform.position : posicionMapaActual;
 
         // inicializar vidas
         lives = Mathf.Max(0, startingLives);
@@ -109,19 +115,9 @@ public class GameManager : MonoBehaviour
         // Asegurar UI: si no hay referencias, intentar encontrar o crear elementos UI
         EnsureUI();
 
-        // Si MenuPrincipal marcó startOnLoad, iniciamos la sesión
-        if (GameSession.startOnLoad)
-        {
-            float duration = GameSession.sessionDuration > 0 ? GameSession.sessionDuration : defaultSessionDuration;
-            StartGameSession(duration);
-            GameSession.Reset();
-        }
-        else
-        {
-            // Mostrar UI inicial aunque no haya sesión (por ejemplo mostrar 00:00 y Score 0)
-            remainingTime = defaultSessionDuration;
-            UpdateUI();
-        }
+        // Iniciar sesion siempre al cargar para sumar score con el tiempo
+        StartGameSession(GameSession.sessionDuration > 0 ? GameSession.sessionDuration : defaultSessionDuration);
+        GameSession.Reset();
     }
 
     private void Update()
@@ -204,7 +200,7 @@ public class GameManager : MonoBehaviour
         else
         {
             Debug.Log($"[GameManager] Vida perdida. Vidas restantes: {lives}");
-            // Aquí podrías invocar lógica de respawn o invulnerabilidad temporal.
+            StartCoroutine(RespawnAfterDelay());
             return false;
         }
     }
@@ -228,7 +224,7 @@ public class GameManager : MonoBehaviour
         AddScore(points);
 
         // Aturdir a todos los enemigos en escena
-        var enemies = FindObjectsOfType<EnemyAI>();
+        var enemies = Object.FindObjectsByType<EnemyAI>(FindObjectsSortMode.None);
         foreach (var e in enemies)
         {
             e.Stun(stunDuration);
@@ -248,7 +244,7 @@ public class GameManager : MonoBehaviour
     /// <summary>
     /// Termina la sesión. Si lostByEnemy==true indica que perdió por enemigo.
     /// </summary>
-    public void EndGame(bool lostByEnemy)
+        public void EndGame(bool lostByEnemy)
     {
         if (sessionOver) return;
 
@@ -259,13 +255,13 @@ public class GameManager : MonoBehaviour
         Time.timeScale = 0f;
 
         // Mostrar resultado final
-        string reason = lostByEnemy ? "Has sido atrapado" : "Se acabó el tiempo";
+        string reason = lostByEnemy ? "Has sido atrapado" : "Se acabo el tiempo";
         Debug.Log($"[GameManager] FIN DE LA PARTIDA: {reason}. Score final: {score:N0}");
 
-        // Actualizar textos finales (si están asignados)
+        // Actualizar textos finales (si estan asignados)
         UpdateUI();
 
-        // Aquí podrías mostrar una pantalla final, reiniciar escena, etc.
+        // Aqu� podr�as mostrar pantalla de derrota; dejamos el juego pausado
     }
 
     // Overload para llamadas externas donde no sabemos la razón
@@ -418,7 +414,7 @@ public class GameManager : MonoBehaviour
     private void CreateDefaultUI()
     {
         // Revisar si ya existe un Canvas en escena
-        Canvas existingCanvas = FindObjectOfType<Canvas>();
+        Canvas existingCanvas = Object.FindFirstObjectByType<Canvas>();
         GameObject canvasGO;
         Canvas canvas;
         if (existingCanvas != null && existingCanvas.renderMode == RenderMode.ScreenSpaceOverlay)
@@ -614,6 +610,14 @@ public class GameManager : MonoBehaviour
     // ! Crear un nuevo escenario en la posicion indicada
     public void CrearEscenario(float posX, float posZ)
     {
+        if (!EnsureMapaActual())
+        {
+            Debug.LogWarning("[GameManager] mapaActual es nulo, no se puede crear escenario. Asigna el mapa actual en escena.");
+            return;
+        }
+
+        posicionMapaActual = mapaActual.transform.position;
+
         GameObject prefab = SeleccionarPrefab();
         if (prefab == null)
         {
@@ -623,9 +627,25 @@ public class GameManager : MonoBehaviour
 
         GameObject esteMapa = Instantiate(
             prefab,
-            new Vector3(posicionMapaActual.x + posX, 3f, posicionMapaActual.z + posZ),
+            new Vector3(posicionMapaActual.x + posX, posicionMapaActual.y, posicionMapaActual.z + posZ),
             Quaternion.identity
         );
+
+        // Rebuild NavMesh en el mapa nuevo si tiene superficies
+        var surfaces = esteMapa.GetComponentsInChildren<NavMeshSurface>();
+        foreach (var surface in surfaces)
+        {
+            surface.RemoveData();
+            surface.BuildNavMesh();
+        }
+
+        // Reactivar agentes dentro del mapa recién creado
+        var enemiesInMap = esteMapa.GetComponentsInChildren<EnemyAI>(true);
+        foreach (var enemy in enemiesInMap)
+        {
+            if (enemy != null)
+                enemy.ReactivateOnNavMesh();
+        }
 
         listaMapasAlrededor.Add(esteMapa);
         mapasGenerados++;
@@ -633,6 +653,18 @@ public class GameManager : MonoBehaviour
         if (enemyTeleporter != null)
         {
             enemyTeleporter.HandleMapaCreado(esteMapa);
+        }
+
+        // Asegurar que todos los enemigos sigan al jugador después de crear un mapa
+        Transform playerTf = GetPlayerTransform();
+        if (playerTf != null)
+        {
+            var enemies = Object.FindObjectsByType<EnemyAI>(FindObjectsSortMode.None);
+            foreach (var e in enemies)
+            {
+                if (e != null)
+                    e.ForceChase(playerTf);
+            }
         }
     }
 
@@ -668,9 +700,37 @@ public class GameManager : MonoBehaviour
 
     public void BorrarMapasAlrededor()
     {
+        if (listaMapasAlrededor == null)
+            listaMapasAlrededor = new List<GameObject>();
+
+        // Asegura que tenemos un mapa actual; si no, no borres nada
+        if (mapaActual == null)
+        {
+            // intentar recuperar algún mapa en escena
+            var ce = Object.FindFirstObjectByType<CreadorEscenarios>();
+            if (ce != null && ce.transform.parent != null)
+                mapaActual = ce.transform.parent.gameObject;
+            if (mapaActual == null)
+                return;
+        }
+
+        if (!listaMapasAlrededor.Contains(mapaActual))
+            listaMapasAlrededor.Add(mapaActual);
+
         foreach (var mapa in listaMapasAlrededor)
         {
+            if (mapa == null) continue;
+
             CreadorEscenarios creadorEscenarios = mapa.GetComponentInChildren<CreadorEscenarios>();
+            if (creadorEscenarios == null) continue;
+
+            // Nunca destruyas el mapa actual
+            if (mapa == mapaActual)
+            {
+                creadorEscenarios.borrarEsteMapa = true;
+                posicionMapaActual = mapaActual.transform.position;
+                continue;
+            }
 
             if (creadorEscenarios.borrarEsteMapa == true)
             {
@@ -680,11 +740,13 @@ public class GameManager : MonoBehaviour
             {
                 creadorEscenarios.borrarEsteMapa = true;
                 mapaActual = creadorEscenarios.transform.parent.gameObject;
+                posicionMapaActual = mapaActual.transform.position;
             }
         }
 
         listaMapasAlrededor.Clear();
-        listaMapasAlrededor.Add(mapaActual);
+        if (mapaActual != null)
+            listaMapasAlrededor.Add(mapaActual);
     }
 
     private GameObject SeleccionarPrefab()
@@ -711,5 +773,73 @@ public class GameManager : MonoBehaviour
         return arrayMapas[indiceAleatorio];
     }
 
-    
+    private bool EnsureMapaActual()
+    {
+        if (mapaActual != null)
+            return true;
+
+        CreadorEscenarios ce = Object.FindFirstObjectByType<CreadorEscenarios>();
+        if (ce != null && ce.transform.parent != null)
+        {
+            mapaActual = ce.transform.parent.gameObject;
+            posicionMapaActual = mapaActual.transform.position;
+            return true;
+        }
+
+        return false;
+    }
+
+    private Transform GetPlayerTransform()
+    {
+        if (playerTransformCache != null)
+            return playerTransformCache;
+
+        GameObject playerObj = GameObject.FindGameObjectWithTag("Player");
+        if (playerObj != null)
+            playerTransformCache = playerObj.transform;
+
+        return playerTransformCache;
+    }
+
+    private void RespawnEntities()
+    {
+        // Respawn del jugador
+        GameObject player = GameObject.FindGameObjectWithTag("Player");
+        if (player != null && playerSpawnPoint != null)
+        {
+            var controller = player.GetComponent<CharacterController>();
+            if (controller != null)
+            {
+                controller.enabled = false;
+                player.transform.position = playerSpawnPoint.position;
+                controller.enabled = true;
+            }
+            else
+            {
+                player.transform.position = playerSpawnPoint.position;
+            }
+        }
+
+        // Respawn/Reset del enemigo
+        EnemyAI enemy = enemyRef != null ? enemyRef : Object.FindFirstObjectByType<EnemyAI>();
+        if (enemy != null && enemySpawnPoint != null)
+        {
+            enemy.ResetAI(enemySpawnPoint.position);
+        }
+    }
+
+    private IEnumerator RespawnAfterDelay()
+    {
+        Time.timeScale = 1f;
+        yield return new WaitForSeconds(respawnDelay);
+        RespawnEntities();
+    }
+
+    private IEnumerator ReloadSceneAfterDelay(float seconds)
+    {
+        Time.timeScale = 1f;
+        yield return new WaitForSeconds(seconds);
+        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+    }
 }
+
