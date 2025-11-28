@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
 using TMPro;
+using UnityEngine.AI;
 using Unity.AI.Navigation;
 
 public class GameManager : MonoBehaviour
@@ -630,6 +631,14 @@ public class GameManager : MonoBehaviour
             new Vector3(posicionMapaActual.x + posX, posicionMapaActual.y, posicionMapaActual.z + posZ),
             Quaternion.identity
         );
+
+        // Deshabilitar agentes para evitar error de NavMesh al instanciar
+        var agents = esteMapa.GetComponentsInChildren<NavMeshAgent>(true);
+        foreach (var ag in agents)
+        {
+            if (ag != null)
+                ag.enabled = false;
+        }
 
         // Rebuild NavMesh en el mapa nuevo si tiene superficies
         var surfaces = esteMapa.GetComponentsInChildren<NavMeshSurface>();

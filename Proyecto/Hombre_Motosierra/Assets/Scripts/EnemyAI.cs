@@ -310,8 +310,13 @@ public class EnemyAI : MonoBehaviour
     void StartChase()
     {
         if (isChasing) return;
+        if (!EnsureComponents() || player == null)
+            return;
 
-        if (!EnsureComponents() || !EnsureOnNavMesh() || player == null)
+        if (agent == null || !agent.enabled)
+            return;
+
+        if (!EnsureOnNavMesh() || !agent.isOnNavMesh)
             return;
 
         alertMessageTimer = alertMessageDuration;
@@ -329,11 +334,14 @@ public class EnemyAI : MonoBehaviour
         isPatrolling = false;
         isChasing = true;
 
-        agent.ResetPath();
-        agent.speed = chaseSpeed;
-        agent.acceleration = chaseAcceleration;
-        agent.stoppingDistance = 0.5f;
-        agent.isStopped = false;
+        if (agent.isOnNavMesh)
+        {
+            agent.ResetPath();
+            agent.speed = chaseSpeed;
+            agent.acceleration = chaseAcceleration;
+            agent.stoppingDistance = 0.5f;
+            agent.isStopped = false;
+        }
 
         currentAnimationSpeed = Mathf.InverseLerp(0f, chaseSpeed, agent.speed);
         animator.SetFloat("Speed", currentAnimationSpeed);
@@ -489,7 +497,7 @@ public class EnemyAI : MonoBehaviour
 
     private void TryPlayFootsteps()
     {
-        if (audioSource == null || agent == null || footstepSounds == null || footstepSounds.Count == 0)
+        if (audioSource == null || agent == null || !agent.enabled || footstepSounds == null || footstepSounds.Count == 0)
             return;
 
         if (footstepTimer > 0f)
@@ -573,7 +581,9 @@ public class EnemyAI : MonoBehaviour
         if (target == null) return;
         if (!EnsureComponents())
             return;
-        if (!EnsureOnNavMesh())
+        if (agent == null || !agent.enabled)
+            return;
+        if (!EnsureOnNavMesh() || !agent.isOnNavMesh)
             return;
         player = target;
         isGameOver = false;
@@ -592,7 +602,7 @@ public class EnemyAI : MonoBehaviour
 
     private bool EnsureOnNavMesh()
     {
-        if (agent == null)
+        if (agent == null || !agent.enabled)
             return false;
 
         if (agent.isOnNavMesh)
